@@ -11,7 +11,7 @@ use axum::{
 };
 use serde::Deserialize;
 use chrono::Utc;
-use tracing::error;
+use tracing::{error, warn};
 use std::sync::Arc;
 use cache::DomainCache;
 use config::Config;
@@ -27,8 +27,8 @@ async fn main() {
     // init tracing logger
     tracing_subscriber::fmt::init();
 
-    // init config
-    let config = Arc::new(Config::default());
+    // load config from command line args
+    let config = Arc::new(Config::from_args());
     // init cache
     let cache = Arc::new(DomainCache::new(config.cache_ttl));
 
@@ -41,8 +41,8 @@ async fn main() {
         }));
 
     // start server
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:9222").await.unwrap();
-    tracing::info!("Server running on http://0.0.0.0:9222");
+    let listener = tokio::net::TcpListener::bind(&config.listen_addr).await.unwrap();
+    tracing::info!("Server running on http://{}", config.listen_addr);
     
     axum::serve(listener, app).await.unwrap();
 }
@@ -103,3 +103,4 @@ domain_probe_success{{domain="{}"}} {}
         response
     )
 }
+
