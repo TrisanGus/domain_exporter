@@ -21,6 +21,7 @@
   "uy.com": "whois.centralnic.net",
   "web.com": "whois.centralnic.net",
   "za.com": "whois.centralnic.net",
+  "shop": "whois.nic.shop",
   "com": {
     "host": "whois.verisign-grs.com",
     "query": "DOMAIN $addr\r\n"
