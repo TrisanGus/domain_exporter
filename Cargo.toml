@@ -9,4 +9,6 @@ tokio = { version = "1.0", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 serde = { version = "1.0", features = ["derive"] }
-
+whois-rust = "1.5"
+chrono = "0.4"
+anyhow = "1.0"

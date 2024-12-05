@@ -1,3 +1,5 @@
+mod whois;
+
 use axum::{
     extract::Query,
     routing::get,
@@ -5,6 +7,8 @@ use axum::{
     response::IntoResponse,
 };
 use serde::Deserialize;
+use chrono::Utc;
+
 
 // query params struct
 #[derive(Deserialize)]
@@ -32,19 +36,31 @@ async fn main() {
 async fn probe_handler(Query(params): Query<ProbeParams>) -> impl IntoResponse {
     let target = &params.target;
     
-    // build basic metrics response
+    // execute WHOIS query
+    let probe_result = whois::query_domain(target).await;
+    
+    let (expiry_days, probe_success) = match probe_result {
+        Ok(domain_info) => {
+            let now = Utc::now();
+            let days = (domain_info.expiry_date - now).num_days();
+            (days, 1)
+        },
+        Err(_) => (-1, 0),
+    };
+
+    // build metrics response
     let response = format!(
         r#"# HELP domain_expiry_days Days until domain expiry
 # TYPE domain_expiry_days gauge
-domain_expiry_days{{domain="{}"}} -1
+domain_expiry_days{{domain="{}"}} {}
 # HELP domain_probe_success Displays whether or not the domain probe was successful
 # TYPE domain_probe_success gauge
-domain_probe_success{{domain="{}"}} 0
+domain_probe_success{{domain="{}"}} {}
 "#,
-        target, target
+        target, expiry_days,
+        target, probe_success
     );
 
-    // set response headers
     (
         [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")],
         response
