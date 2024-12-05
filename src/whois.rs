@@ -1,27 +1,33 @@
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
 use whois_rust::{WhoIs, WhoIsLookupOptions};
-use std::path::Path;
+use rust_embed::RustEmbed;
+
+#[derive(RustEmbed)]
+#[folder = "assets/"]
+struct Asset;
 
 pub struct DomainInfo {
     pub expiry_date: DateTime<Utc>,
-    pub raw_text: String,
 }
 
 pub async fn query_domain(domain: &str) -> Result<DomainInfo> {
-    // Create WHOIS client using servers.json file
-    let whois = WhoIs::from_path(Path::new("servers.json"))?;
+    // Read servers.json from embedded resources
+    let servers_json = Asset::get("servers.json")
+        .ok_or_else(|| anyhow!("Could not find servers.json"))?;
     
+    // Convert bytes to string
+    let servers_str = std::str::from_utf8(&servers_json.data)?;
+    // Create WHOIS client using string
+    let whois = WhoIs::from_string(servers_str)?;
     // Query domain
     let raw_text = whois.lookup(WhoIsLookupOptions::from_string(domain)?)?;
-    
     // Parse expiry date
     let expiry_date = parse_expiry_date(&raw_text)
-        .ok_or_else(|| anyhow!("无法解析过期时间"))?;
+        .ok_or_else(|| anyhow!("Could not parse expiry date"))?;
 
     Ok(DomainInfo {
         expiry_date,
-        raw_text,
     })
 }
 
