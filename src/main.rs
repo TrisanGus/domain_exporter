@@ -1,4 +1,5 @@
 mod whois;
+mod error;
 
 use axum::{
     extract::Query,
@@ -8,6 +9,7 @@ use axum::{
 };
 use serde::Deserialize;
 use chrono::Utc;
+use tracing::error;
 
 
 // query params struct
@@ -37,15 +39,16 @@ async fn probe_handler(Query(params): Query<ProbeParams>) -> impl IntoResponse {
     let target = &params.target;
     
     // execute WHOIS query
-    let probe_result = whois::query_domain(target).await;
-    
-    let (expiry_days, probe_success) = match probe_result {
+    let (expiry_days, probe_success) = match whois::query_domain(target).await {
         Ok(domain_info) => {
             let now = Utc::now();
             let days = (domain_info.expiry_date - now).num_days();
             (days, 1)
         },
-        Err(_) => (-1, 0),
+        Err(e) => {
+            error!("Error querying domain: {:?}", e);
+            (-1, 0)
+        }
     };
 
     // build metrics response
