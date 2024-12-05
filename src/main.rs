@@ -1,5 +1,7 @@
 mod whois;
 mod error;
+mod cache;
+mod config;
 
 use axum::{
     extract::Query,
@@ -10,7 +12,9 @@ use axum::{
 use serde::Deserialize;
 use chrono::Utc;
 use tracing::error;
-
+use std::sync::Arc;
+use cache::DomainCache;
+use config::Config;
 
 // query params struct
 #[derive(Deserialize)]
@@ -23,9 +27,18 @@ async fn main() {
     // init tracing logger
     tracing_subscriber::fmt::init();
 
+    // init config
+    let config = Arc::new(Config::default());
+    // init cache
+    let cache = Arc::new(DomainCache::new(config.cache_ttl));
+
     // create router
     let app = Router::new()
-        .route("/probe", get(probe_handler));
+        .route("/probe", get({
+            let cache = Arc::clone(&cache);
+            let config = Arc::clone(&config);
+            move |params| probe_handler(params, cache, config)
+        }));
 
     // start server
     let listener = tokio::net::TcpListener::bind("0.0.0.0:9222").await.unwrap();
@@ -35,14 +48,32 @@ async fn main() {
 }
 
 // update handler
-async fn probe_handler(Query(params): Query<ProbeParams>) -> impl IntoResponse {
+async fn probe_handler(
+    Query(params): Query<ProbeParams>, 
+    cache: Arc<DomainCache>,
+    config: Arc<Config>,
+) -> impl IntoResponse {
     let target = &params.target;
+
+    // check cache
+    if let Some(entry) = cache.get(target).await {
+        let now = Utc::now();
+        let days = (entry.expiry_date - now).num_days();
+        return format_response(target, days, 1);
+    }
     
     // execute WHOIS query
-    let (expiry_days, probe_success) = match whois::query_domain(target).await {
+    let (expiry_days, probe_success) = match whois::query_domain(target, &config).await {
         Ok(domain_info) => {
             let now = Utc::now();
             let days = (domain_info.expiry_date - now).num_days();
+            // Only cache successful results with valid expiry dates
+            if days >= 0 {
+                // update cache
+                cache.set(target.to_string(), domain_info.expiry_date).await;
+            } else {
+                warn!("Got invalid expiry date for domain {}: {} days", target, days);
+            }
             (days, 1)
         },
         Err(e) => {
@@ -51,7 +82,10 @@ async fn probe_handler(Query(params): Query<ProbeParams>) -> impl IntoResponse {
         }
     };
 
-    // build metrics response
+    format_response(target, expiry_days, probe_success)
+}
+
+fn format_response(domain: &str, expiry_days: i64, probe_success: i32) -> impl IntoResponse {
     let response = format!(
         r#"# HELP domain_expiry_days Days until domain expiry
 # TYPE domain_expiry_days gauge
@@ -60,8 +94,8 @@ domain_expiry_days{{domain="{}"}} {}
 # TYPE domain_probe_success gauge
 domain_probe_success{{domain="{}"}} {}
 "#,
-        target, expiry_days,
-        target, probe_success
+        domain, expiry_days,
+        domain, probe_success
     );
 
     (

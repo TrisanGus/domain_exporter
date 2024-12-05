@@ -5,8 +5,8 @@ use std::time::Duration;
 use tokio::time::{timeout, sleep};
 use tracing::{info, warn};
 use rust_embed::RustEmbed;
+use crate::config::Config;
 
-const WHOIS_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_RETRIES: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_secs(2);
 
@@ -18,11 +18,11 @@ pub struct DomainInfo {
     pub expiry_date: DateTime<Utc>,
 }
 
-pub async fn query_domain(domain: &str) -> Result<DomainInfo> {
+pub async fn query_domain(domain: &str, config: &Config) -> Result<DomainInfo> {
     let mut retries = 0;
     
     loop {
-        match query_domain_internal(domain).await {
+        match query_domain_internal(domain, config).await {
             Ok(info) => return Ok(info),
             Err(e) => {
                 match e {
@@ -43,7 +43,7 @@ pub async fn query_domain(domain: &str) -> Result<DomainInfo> {
     }
 }
 
-async fn query_domain_internal(domain: &str) -> Result<DomainInfo> {
+async fn query_domain_internal(domain: &str, config: &Config) -> Result<DomainInfo> {
     info!("Querying domain: {}", domain);
 
     // Read servers.json from embedded resources
@@ -61,7 +61,7 @@ async fn query_domain_internal(domain: &str) -> Result<DomainInfo> {
     
     // Query domain with timeout
     let lookup_result = timeout(
-        WHOIS_TIMEOUT,
+        config.whois_timeout,
         tokio::task::spawn_blocking(move || {
             whois.lookup(WhoIsLookupOptions::from_string(&domain)?)
         })
@@ -81,7 +81,7 @@ async fn query_domain_internal(domain: &str) -> Result<DomainInfo> {
             text
         },
         Err(_) => {
-            warn!("Domain query timed out after {:?}", WHOIS_TIMEOUT);
+            warn!("Domain query timed out after {:?}", config.whois_timeout);
             return Err(DomainError::TimeoutError);
         }
     };
