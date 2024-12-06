@@ -1,5 +1,6 @@
 use std::time::Duration;
 use clap::Parser;
+use std::env;
 
 /// Command line arguments for the application
 #[derive(Parser)]
@@ -29,13 +30,26 @@ pub struct Config {
 }
 
 impl Config {
-    /// Creates configuration from command line arguments
+    /// Creates configuration from command line arguments and environment variables
     pub fn from_args() -> Self {
         let args = Args::parse();
+        
+        // Environment variables take precedence over command line arguments
         Self {
-            cache_ttl: Duration::from_secs(args.cache_ttl),
-            whois_timeout: Duration::from_secs(args.whois_timeout),
-            listen_addr: args.listen_addr,
+            cache_ttl: Duration::from_secs(
+                env::var("CACHE_TTL")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(args.cache_ttl)
+            ),
+            whois_timeout: Duration::from_secs(
+                env::var("WHOIS_TIMEOUT")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(args.whois_timeout)
+            ),
+            listen_addr: env::var("LISTEN_ADDR")
+                .unwrap_or(args.listen_addr),
         }
     }
 }

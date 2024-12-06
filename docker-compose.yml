@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  domain-exporter:
+    build: .
+    ports:
+      - "9222:9222"
+    command:
+      - "--listen-addr=0.0.0.0:9222"
+      - "--cache-ttl=86400"
+      - "--whois-timeout=10"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9222/probe?target=example.com"]
+      interval: 30s
+      timeout: 10s
+      retries: 3 

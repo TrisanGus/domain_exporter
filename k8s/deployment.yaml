@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: domain_exporter
+  labels:
+    app: domain_exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: domain_exporter
+  template:
+    metadata:
+      labels:
+        app: domain_exporter
+    spec:
+      containers:
+      - name: domain_exporter
+        image: domain_exporter:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9222
+        env:
+        - name: CACHE_TTL
+          value: "86400"
+        - name: WHOIS_TIMEOUT
+          value: "10"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: domain_exporter
+spec:
+  selector:
+    app: domain_exporter
+  ports:
+  - port: 9222
+    targetPort: 9222 

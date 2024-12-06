@@ -136,3 +136,46 @@ Contributions are welcome! Please submit issues and pull requests.
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a pull request
+
+## Docker Usage
+
+### Using Docker Compose
+
+1. Build and start the service:
+```bash
+docker-compose up -d
+```
+
+2. Check the logs:
+```bash
+docker-compose logs -f
+```
+
+3. Stop the service:
+```bash
+docker-compose down
+```
+
+### Using Docker Directly
+
+1. Build the image:
+```bash
+docker build -t domain-exporter .
+```
+
+2. Run the container:
+```bash
+docker run -d -p 9222:9222 domain-exporter
+```
+
+### Docker Environment Variables
+
+You can configure the exporter using environment variables:
+
+```bash
+docker run -d \
+  -p 9222:9222 \
+  -e CACHE_TTL=86400 \
+  -e WHOIS_TIMEOUT=10 \
+  domain-exporter
+```
