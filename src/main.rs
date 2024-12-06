@@ -23,6 +23,29 @@ struct ProbeParams {
     target: String,
 }
 
+/// Handler for the root path (/)
+/// Returns a simple HTML page with links to metrics and probe endpoints
+async fn index_handler() -> impl IntoResponse {
+    let html = r#"
+        <html>
+        <head><title>Domain Exporter</title></head>
+        <body>
+            <h1>Domain Exporter</h1>
+            <p><a href="/metrics">Metrics</a></p>
+            <p><a href="/probe?target=google.com">Probe google.com</a></p>
+            <h2>Usage</h2>
+            <p>To check a domain expiration:</p>
+            <code>"curl localhost:9222/probe?target=example.com"</code>
+        </body>
+        </html>
+    "#;
+
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/html")],
+        html
+    )
+}
+
 #[tokio::main]
 async fn main() {
     // Initialize the tracing logger for better debugging and monitoring
@@ -34,8 +57,9 @@ async fn main() {
     // Initialize the domain cache with configured TTL
     let cache = Arc::new(DomainCache::new(config.cache_ttl));
 
-    // Create the router with probe endpoint
+    // Create the router with all endpoints
     let app = Router::new()
+        .route("/", get(index_handler))  // Add root path handler
         .route("/probe", get({
             let cache = Arc::clone(&cache);
             let config = Arc::clone(&config);
@@ -115,4 +139,3 @@ domain_probe_success{{domain="{}"}} {}
         response
     )
 }
-
