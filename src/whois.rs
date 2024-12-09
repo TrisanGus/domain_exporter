@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc, TimeZone, NaiveDate, NaiveDateTime};
 use whois_rust::{WhoIs, WhoIsLookupOptions};
 use std::time::Duration;
 use tokio::time::{timeout, sleep};
-use tracing::{info, warn};
+use tracing::{info, warn, debug, error};
 use rust_embed::RustEmbed;
 use crate::config::Config;
 
@@ -96,13 +96,19 @@ async fn query_domain_internal(domain: &str, config: &Config) -> Result<DomainIn
 }
 
 fn parse_expiry_date(whois_text: &str) -> Option<DateTime<Utc>> {
-    // Common expiry date fields
+    // Common expiry date fields, including all common patterns
     let expiry_patterns = [
         "Expiry Date:",
         "Registry Expiry Date:",
         "Expiration Date:",
         "Registrar Registration Expiration Date:",
+        "Expiration Time:", // .cn format
+        "Domain Expiration Date:", // some registrars use this
+        "Expires:", // another common format
+        "Expires on:", // another variation
     ];
+
+    debug!("WHOIS Response:\n{}", whois_text);
 
     for line in whois_text.lines() {
         for pattern in expiry_patterns.iter() {
@@ -110,17 +116,22 @@ fn parse_expiry_date(whois_text: &str) -> Option<DateTime<Utc>> {
                 if let Some(date_str) = line.split(pattern).nth(1) {
                     // Clean date string
                     let date_str = date_str.trim();
+                    debug!("Found date string: {}", date_str);
                     
                     // Try parsing different date formats
                     let parsed_date = try_parse_date(date_str);
-                    if parsed_date.is_some() {
-                        return parsed_date;
+                    if let Some(date) = parsed_date {
+                        debug!("Successfully parsed date: {}", date);
+                        return Some(date);
+                    } else {
+                        warn!("Failed to parse date string: {}", date_str);
                     }
                 }
             }
         }
     }
     
+    error!("No valid expiry date found in WHOIS response");
     None
 }
 
@@ -132,6 +143,27 @@ fn try_parse_date(date_str: &str) -> Option<DateTime<Utc>> {
         .unwrap_or(date_str)
         .trim();
 
+    // Common date formats, including all known variations
+    let formats = [
+        "%Y-%m-%d %H:%M:%S",            // 2024-08-09 17:46:14 (.cn format)
+        "%Y-%m-%dT%H:%M:%SZ",           // 2024-03-21T15:30:00Z
+        "%Y-%m-%dT%H:%M:%S%:z",         // 2024-03-21T15:30:00+00:00
+        "%Y-%m-%d %H:%M:%S %Z",         // 2024-03-21 15:30:00 UTC
+        "%d-%b-%Y %H:%M:%S %Z",         // 21-Mar-2024 15:30:00 UTC
+        "%Y-%m-%d %H:%M:%S.%f %Z",      // With microseconds
+        "%Y-%m-%d %H:%M:%S.%f",         // With microseconds, no timezone
+        "%Y-%m-%dT%H:%M:%S.%fZ",        // ISO format with microseconds
+        "%d-%b-%Y",                      // 21-Mar-2024
+        "%Y-%m-%d",                      // 2024-03-21
+        "%Y.%m.%d",                      // 2024.03.21
+        "%d.%m.%Y",                      // 21.03.2024
+        "%Y/%m/%d",                      // 2024/03/21
+        "%d/%m/%Y",                      // 21/03/2024
+        "%B %d %Y",                      // March 21 2024
+        "%d %B %Y",                      // 21 March 2024
+        "%Y-%m-%d %H:%M:%S%z",          // With numeric timezone
+    ];
+
     // Special handling for dates with .0Z format
     if date_str.ends_with(".0Z") {
         let without_ms = date_str.replace(".0Z", "Z");
@@ -139,20 +171,6 @@ fn try_parse_date(date_str: &str) -> Option<DateTime<Utc>> {
             return Some(dt.with_timezone(&Utc));
         }
     }
-
-    // Common date formats
-    let formats = [
-        "%Y-%m-%dT%H:%M:%SZ",           // 2024-03-21T15:30:00Z
-        "%Y-%m-%dT%H:%M:%S%:z",         // 2024-03-21T15:30:00+00:00
-        "%Y-%m-%d %H:%M:%S %Z",         // 2024-03-21 15:30:00 UTC
-        "%Y-%m-%d %H:%M:%S",            // 2024-03-21 15:30:00
-        "%d-%b-%Y %H:%M:%S %Z",         // 21-Mar-2024 15:30:00 UTC
-        "%d-%b-%Y",                      // 21-Mar-2024
-        "%Y-%m-%d",                      // 2024-03-21
-        "%Y.%m.%d",                      // 2024.03.21
-        "%d.%m.%Y",                      // 21.03.2024
-        "%Y/%m/%d",                      // 2024/03/21
-    ];
 
     // Try parsing with standard formats
     for format in formats.iter() {
@@ -171,6 +189,9 @@ fn try_parse_date(date_str: &str) -> Option<DateTime<Utc>> {
         "%Y.%m.%d",
         "%d.%m.%Y",
         "%Y/%m/%d",
+        "%d/%m/%Y",
+        "%B %d %Y",
+        "%d %B %Y",
     ];
 
     for format in date_formats.iter() {
