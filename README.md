@@ -16,13 +16,13 @@ Domain Exporter is a Rust-based tool for monitoring domain expiration. It querie
 Ensure you have the Rust toolchain installed, then run:
 
 ```bash
-cargo install --git https://github.com/yourusername/domain_exporter
+cargo install --git https://github.com/TrisanGus/domain_exporter
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/yourusername/domain_exporter
+git clone https://github.com/TrisanGus/domain_exporter
 cd domain_exporter
 cargo build --release
 ```
